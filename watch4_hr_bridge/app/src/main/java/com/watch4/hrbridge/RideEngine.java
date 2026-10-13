@@ -409,7 +409,7 @@ final class RideEngine implements SensorEventListener {
             return;
         }
         hadSample = true;
-        
+
         setHrState("真实 BPM，accuracy=" + e.accuracy + (eventMs > now ? "（时钟兼容）" : ""));
         if (diagnostics && (sample.bpm() != lastLoggedBpm || now - lastSampleLog >= 30_000)) {
             log("HR bpm=" + sample.bpm() + " accuracy=" + e.accuracy);
@@ -424,7 +424,7 @@ final class RideEngine implements SensorEventListener {
     }
     private void invalidateSample(String reason) {
         sample.clear(); pending.clear(); hadSample = false;
-        
+
         if (!hrState.equals(reason) && diagnostics) log(reason);
         setHrState(reason);
     }

@@ -1,33 +1,37 @@
-# Watch4 HR Bridge v0.4-clock-fix
+# Watch4 HR Bridge v0.5-ride
 
-原生 Java Android 前台诊断 App，将 OPPO Watch 4 Pro 的真实心率作为标准 BLE 心率服务发送给 Magene C606 Pro。无 Wear OS、Google Play Services、.NET、网络权限或第三方运行时依赖。
+原生 Java Android 心率广播 App，目标 OPPO Watch 4 Pro OWW221 / Android 11 API30。
+无 Wear OS、Google Play Services、.NET、网络、GPS或重量级UI依赖。
 
-## 云端获取 APK
+v0.4已由用户实测：真实85 BPM在手表与nRF手机端一致，CCCD通知开启，正状态样本通过，时钟偏差兼容有效。
+v0.5将传感器/BLE移至前台服务，提供后台骑行、锁屏可靠模式和功耗对照记录；这些新行为仍需目标手表实测。
 
-仓库根目录唯一工作流为 `.github/workflows/main.yml`。推送 main 或手动运行 **Build Watch4 APK**，成功后下载 **Watch4-HR-Test** artifact，解压得到 `app-debug.apk` 和 SHA256 文件。不需要本地 Android Studio。
+## 安装与开始
 
-构建固定为 AGP 8.7.3、Gradle 8.9、JDK 17、SDK/Build Tools 35；完整执行 assembleDebug、7 项心率协议单元测试、lint 和 APK 签名检查。缺少 APK 会失败，不上传失败构建的安装包。
+仓库根目录唯一工作流 `.github/workflows/main.yml`，成功后下载 **Watch4-HR-Test** artifact APK。
+不需要本地 Android Studio。点击“开始骑行广播”后，可离开页面或锁屏；在页面或常驻通知中停止。
+首次建议使用默认“锁屏可靠模式”。默认不常亮、不展示诊断日志。点击“显示诊断”查看raw和事件计数。
+API12+未开放，本版运行范围Android8–11。
 
-## 当前范围
+## 核心行为
 
-- minSdk 26 / targetSdk 35；目标实机为 OWW221 / Android 11 API 30。Android 12+ 暂不开放测试。
-- BODY_SENSORS 权限与 TYPE_HEART_RATE；丢弃无接触、不可靠、无效或过期读数。
-- GATT 180D / Notify 2A37 / CCCD 2902，等待服务添加成功后才广播。
-- 每个客户端独立订阅；通知逐条等完成回调，队列只保留最新样本。
-- 每秒可重发最近真实样本；30 秒无新有效事件清空 BPM 并暂停通知。
-- 广播错误码 1 自动去名称重试；停止/退出前台释放传感器、广播和 GATT。
-- 小屏原生 UI 与有界诊断日志；测试时保持亮屏。
+- 原生前台服务与单工作线程；Activity只授权、控制与显示。
+- 标准TYPE_HEART_RATE与BLE 180D / 2A37 / 2902，约1Hz输出最新真实样本。
+- 保留accuracy过滤、OWW221最多2500ms未来时间兼容以及30秒无新有效事件暂停。
+- BALANCED广告模式；心率订阅建立后暂停发现广告，所有订阅断开后恢复。
+- 蓝牙关闭时暂停采集，重新开启恢复；GATT/广告/通知异常按2–60秒退避重试。
+- 屏灭且采集活动时，可靠模式持有有限租约的PARTIAL_WAKE_LOCK；亮屏、暂停和停止释放。
+- 省电试验模式取消CPU锁，屏灭是否持续更新必须实测。
+- 页面可见时刷新，离开不刷新；系统通知按状态变化节流更新。
+- 起止电量、时长、充电标记提供粗略功耗对照；没有虚构耗电结论。
+- 显式停止释放资源；系统重建sticky服务时重新初始化。强行停止与重启不保证自动恢复，无开机自启动。
 
-编译成功不等于已通过实机验证。尚需确认第三方 App 在 OPPO 固件下持续收到有效 BPM、外设广播成功、C606 Pro 订阅并显示实时读数。后台、锁屏保活与骑行功耗留待前台验收后开发。
+完整操作、逻辑、锁屏/功耗验收与日志见仓库根目录 [RIDING.md](../RIDING.md)。
+旧版前台诊断步骤保留在 [TESTING.md](../TESTING.md)。
 
-完整 Windows ADB 命令、顺序验收、日志收集和错误码排查见仓库根目录 [TESTING.md](../TESTING.md)。
+## 云端验证
 
-## v0.4 有界时钟兼容与心率诊断
-
-用于定位“accuracy 在 0/1/3 变化但无 BPM”的实机反馈。屏幕新增 raw、accuracy、事件年龄和事件/正状态/通过计数；日志 RAW_HR 包含完整标准事件值、事件时间、elapsedRealtime、uptime 与每次校验原因。
-实机截图显示 raw=77、age=-1800ms、事件/正状态/通过=42/10/0。旧版严格拒绝未来时间；它很可能也阻断了正 accuracy 的读数，尚需新版实测确认。
-仅对 Build.DEVICE 或 Build.MODEL 为 OWW221（忽略大小写）容忍最多2500ms未来偏差。可靠、有限、范围内的真实读数在此窗口内采用接收时刻计算新鲜度；日志保留原始时间和 boundedArrivalTime 标记。超过窗口、过期、零值、accuracy<=0仍拒绝；其他设备保留严格时间策略。
-此兼容规则依据本次观察，不证明厂商时钟异常的具体来源。30秒有效期限和准确性过滤仍保留。
-诊断原因包括 INVALID_BPM、UNRELIABLE、NO_CONTACT、FUTURE_TIME、STALE_TIME、OLD_SESSION。
-请先在系统应用完成一次测量，退出后进入本 App 保持前台 60 秒，发送原始事件区域与状态截图。
+AGP8.7.3 / Gradle8.9 / JDK17 / compileSdk35 / targetSdk35 / minSdk26。
+CI执行APK编译、9个纯Java测试、lint、签名验证，并在Android11模拟器检查2个服务生命周期场景。
+AndroidX测试依赖只进入测试APK。模拟器验证不能替代OPPO的锁屏心率、码表兼容和实际功耗测量。
 

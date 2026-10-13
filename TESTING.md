@@ -1,5 +1,7 @@
 # Watch4 HR Bridge v0.4：实机验收
 
+这是保留的v0.4前台诊断记录。当前v0.5后台骑行版的逻辑、锁屏和功耗验收请使用 [RIDING.md](RIDING.md)。
+
 目标：OWW221 / Android 11 API 30；接收端 Magene C606 Pro。当前版本只有前台验证。
 构建参数：AGP 8.7.3 / Gradle 8.9 / JDK 17 / compileSdk 35 / targetSdk 35 / minSdk 26。
 targetSdk 从 30 更新至 35，以通过完整 lint 的目标 API 检查；minSdk 26 保持对 Android 11 的安装支持。

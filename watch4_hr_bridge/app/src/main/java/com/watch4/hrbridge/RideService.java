@@ -25,7 +25,8 @@ public final class RideService extends Service {
     private boolean destroyed, receiversRegistered;
     private long lastNotification=-15000, lastLockRenew;
     private int batteryStart=-1, batteryNow=-1;
-    private boolean charging;
+    private boolean charging, chargedDuringRide;
+    private long rideStarted;
     private String notificationKey="";
     public final class LocalBinder extends Binder { RideService service(){return RideService.this;} }
     private final BroadcastReceiver receiver=new BroadcastReceiver(){
@@ -38,6 +39,7 @@ public final class RideService extends Service {
                 int scale=intent.getIntExtra(BatteryManager.EXTRA_SCALE,100);
                 batteryNow=level>=0 && scale>0?Math.round(level*100f/scale):-1;
                 charging=intent.getIntExtra(BatteryManager.EXTRA_PLUGGED,0)!=0;
+                if(riding && charging)chargedDuringRide=true;
                 if(batteryStart<0 && riding)batteryStart=batteryNow;
             }
             updateCpuLock();
@@ -80,7 +82,8 @@ public final class RideService extends Service {
         if(riding)return START_STICKY;
         riding=true;
         prefs.edit().putBoolean("resume",true).apply();
-        batteryStart=-1; notificationKey=""; lastNotification=-15000;
+        batteryStart=-1;chargedDuringRide=false;rideStarted=SystemClock.elapsedRealtime();
+        notificationKey=""; lastNotification=-15000;
         Notification notification=notification();
         if(Build.VERSION.SDK_INT>=29)startForeground(NOTIFICATION_ID,notification,
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE);
@@ -89,9 +92,11 @@ public final class RideService extends Service {
         filter.addAction(BluetoothAdapterAction());
         filter.addAction(Intent.ACTION_SCREEN_ON);filter.addAction(Intent.ACTION_SCREEN_OFF);
         filter.addAction(Intent.ACTION_BATTERY_CHANGED);
-        if(Build.VERSION.SDK_INT>=33)registerReceiver(receiver,filter,Context.RECEIVER_EXPORTED);
-        else registerReceiver(receiver,filter);
+        Intent initial;
+        if(Build.VERSION.SDK_INT>=33)initial=registerReceiver(receiver,filter,Context.RECEIVER_EXPORTED);
+        else initial=registerReceiver(receiver,filter);
         receiversRegistered=true;
+        if(initial!=null)receiver.onReceive(this,initial);
         // Registering the sticky battery broadcast invokes receiver with the initial level.
         if(batteryNow>=0)batteryStart=batteryNow;
         engine.start();
@@ -111,7 +116,8 @@ public final class RideService extends Service {
         String delta=batteryStart<0 || batteryNow<0?"": "，起始 "+batteryStart+"%";
         return (reliableMode()?"锁屏可靠模式":"省电试验模式")
                 +"；CPU锁="+(cpuLock.isHeld()?"持有":"释放")
-                +"\n电量 "+battery+delta+(charging?"（充电中，不能用于耗电测量）":"");
+                +"\n电量 "+battery+delta+(charging?"（充电中，不能用于耗电测量）":"")
+                +(!riding?"\n"+prefs.getString("lastSummary",""):"");
     }
     private final Runnable powerWatchdog=new Runnable(){public void run(){
         if(!riding || destroyed)return;
@@ -142,6 +148,8 @@ public final class RideService extends Service {
     }
     private void updateNotification(boolean force){
         if(!riding)return;
+        if(Build.VERSION.SDK_INT>=33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                !=PackageManager.PERMISSION_GRANTED)return;
         long now=SystemClock.elapsedRealtime();
         String key=state.connections+"/"+state.subscriptions+"/"+(state.bpm>0)+"/"+reliableMode();
         // A stable status needs no repeated notification refresh or per-BPM update.
@@ -150,6 +158,16 @@ public final class RideService extends Service {
         }
     }
     private void stopRide(){
+        if(riding){
+            Intent end=registerReceiver(null,new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+            if(end!=null)receiver.onReceive(this,end);
+            long seconds=(SystemClock.elapsedRealtime()-rideStarted)/1000;
+            String summary="上次骑行 "+seconds/60+"分"+seconds%60+"秒，电量 "+batteryStart+"% → "+batteryNow+"%"
+                    +(chargedDuringRide?"（包含充电，不能计算骑行耗电）":"（电量为整数百分比，仅供粗略比较）");
+            prefs.edit().putString("lastSummary",summary).apply();
+            android.util.Log.i("Watch4HR","RIDE_SUMMARY seconds="+seconds+" batteryStart="+batteryStart
+                    +" batteryEnd="+batteryNow+" charged="+chargedDuringRide+" notifications="+state.notificationCount);
+        }
         riding=false;prefs.edit().putBoolean("resume",false).apply();
         ui.removeCallbacks(powerWatchdog);
         if(receiversRegistered){unregisterReceiver(receiver);receiversRegistered=false;}

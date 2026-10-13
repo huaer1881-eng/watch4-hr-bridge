@@ -105,7 +105,8 @@ public final class MainActivity extends Activity {
         boolean running=service.isRiding();
         start.setEnabled(!running);stop.setEnabled(running);
         long minutes=s.startedMs==0?0:(SystemClock.elapsedRealtime()-s.startedMs)/60000;
-        power.setText(service.powerSummary()+"\n运行 "+minutes+" 分钟，已提交通知 "+s.notificationCount+" 条");
+        power.setText(service.powerSummary()+"\n"+(running?"运行 "+minutes+" 分钟":"已停止")
+                +"，已提交通知 "+s.notificationCount+" 条");
         if(debug.isChecked())details.setText(s.raw+"\n事件/通过="+s.events+"/"+s.accepted+"\n"+s.logs);
     }
     @Override protected void onStart(){
