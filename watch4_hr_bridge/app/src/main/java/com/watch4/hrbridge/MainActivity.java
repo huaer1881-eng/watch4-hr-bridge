@@ -29,7 +29,7 @@ public final class MainActivity extends Activity implements SensorEventListener 
     private final Set<String> subscribers = new HashSet<>();
     private final Set<String> pending = new LinkedHashSet<>();
     private final ArrayDeque<String> logs = new ArrayDeque<>();
-    private TextView bpmText, hrState, bleState, connectedState, logsText;
+    private TextView bpmText, hrState, bleState, connectedState, logsText, rawState;
     private Button startButton, stopButton;
     private SensorManager sensorManager;
     private Sensor hrSensor;
@@ -47,6 +47,8 @@ public final class MainActivity extends Activity implements SensorEventListener 
     private long notificationStarted, sessionStarted;
     private int lastLoggedBpm = -1;
     private long lastSampleLog;
+    private int sensorEvents, acceptedEvents, positiveAccuracyEvents;
+    private long lastRawDisplay = -1, lastRawLog = -1;
     private final BroadcastReceiver bluetoothReceiver = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
             if (active && intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1) != BluetoothAdapter.STATE_ON)
@@ -64,6 +66,11 @@ public final class MainActivity extends Activity implements SensorEventListener 
         log("Android " + Build.VERSION.RELEASE + " / API " + Build.VERSION.SDK_INT);
         log("CPU: " + TextUtils.join(", ", Build.SUPPORTED_ABIS));
         setHrState(hrSensor == null ? "未提供 HEART_RATE" : "已发现：" + hrSensor.getName());
+        if (hrSensor != null) {
+            log("SENSOR name=" + hrSensor.getName() + " vendor=" + hrSensor.getVendor()
+                    + " id=" + hrSensor.getId() + " mode=" + hrSensor.getReportingMode()
+                    + " minDelayUs=" + hrSensor.getMinDelay() + " maxDelayUs=" + hrSensor.getMaxDelay());
+        }
         setBleState("待测试 BLE 广播");
         // Avoid accidental use of legacy permissions on a different OS.
         if (Build.VERSION.SDK_INT != 30) log("本版验收目标为 API 30，其他系统尚未验证");
@@ -84,11 +91,12 @@ public final class MainActivity extends Activity implements SensorEventListener 
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(16), dp(7), dp(16), dp(18));
         scroll.addView(root);
-        TextView title = text("WATCH4 HR TEST", 16, Color.WHITE, true);
+        TextView title = text("WATCH4 HR DIAG 0.3", 16, Color.WHITE, true);
         title.setGravity(Gravity.CENTER); root.addView(title);
         bpmText = text("-- BPM", 33, Color.rgb(116, 224, 174), true);
         bpmText.setGravity(Gravity.CENTER); root.addView(bpmText);
         hrState = text("心率：待检查", 13, Color.WHITE, false); root.addView(hrState);
+        rawState = text("原始事件：等待开始", 12, Color.rgb(255, 207, 128), false); root.addView(rawState);
         bleState = text("BLE：待检查", 13, Color.WHITE, false); root.addView(bleState);
         connectedState = text("码表：尚未连接", 13, Color.WHITE, false); root.addView(connectedState);
         startButton = new Button(this);
@@ -148,6 +156,9 @@ public final class MainActivity extends Activity implements SensorEventListener 
         final int token = ++generation;
         sessionStarted = SystemClock.elapsedRealtime();
         sample.clear(); hadSample = false; notificationBlocked = false;
+        sensorEvents = 0; acceptedEvents = 0; positiveAccuracyEvents = 0;
+        lastRawDisplay = -1; lastRawLog = -1; lastLoggedBpm = -1;
+        rawState.setText("原始事件：等待传感器回调");
         startButton.setText("检测中"); startButton.setEnabled(false); stopButton.setEnabled(true);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         try {
@@ -170,9 +181,9 @@ public final class MainActivity extends Activity implements SensorEventListener 
             if (!active) return;
             long now = SystemClock.elapsedRealtime();
             if (!sample.fresh(now)) {
-                if (hadSample || now - sessionStarted >= HeartRateSample.MAX_AGE_MS) {
-                    invalidateSample("30 秒内无有效新事件；已暂停通知");
-                }
+                if (hadSample) invalidateSample("STALE：30 秒无新有效样本；已暂停通知");
+                else if (sensorEvents == 0 && now - sessionStarted >= HeartRateSample.MAX_AGE_MS)
+                    invalidateSample("NO_EVENTS：30 秒未收到心率事件");
             } else {
                 // Re-send only a recent REAL sample, useful with an on-change sensor.
                 pending.addAll(subscribers);
@@ -391,11 +402,39 @@ public final class MainActivity extends Activity implements SensorEventListener 
         }
     }
     @Override public void onSensorChanged(SensorEvent e) {
-        if (!active || !sensorListening || e.sensor.getType() != Sensor.TYPE_HEART_RATE || e.values.length == 0) return;
+        if (!active || !sensorListening || e.sensor.getType() != Sensor.TYPE_HEART_RATE) return;
         long now = SystemClock.elapsedRealtime();
-        if (e.timestamp / 1_000_000 < sessionStarted) return;
-        if (!sample.accept(e.values[0], e.accuracy, e.timestamp / 1_000_000, now)) {
-            invalidateSample("无效或无接触，accuracy=" + e.accuracy);
+        long eventMs = e.timestamp / 1_000_000;
+        sensorEvents++;
+        if (e.accuracy > 0) positiveAccuracyEvents++;
+        float raw = e.values.length == 0 ? Float.NaN : e.values[0];
+        String reason = e.values.length == 0 ? "EMPTY_VALUES：事件无 BPM"
+                : HeartRateSample.rejectionReason(raw, e.accuracy, eventMs, now);
+        boolean oldSession = eventMs < sessionStarted;
+        // Preserve the original policy: never replay events from a previous session.
+        // Report both the validation result and this additional session gate.
+        String decision = oldSession ? "OLD_SESSION：时间早于本次开始" : reason;
+        if (!oldSession && "OK".equals(reason)) acceptedEvents++;
+        if (lastRawDisplay < 0 || now - lastRawDisplay >= 1000) {
+            rawState.setText("raw=" + raw + "  accuracy=" + e.accuracy
+                    + "\n事件年龄=" + (now - eventMs) + "ms"
+                    + "\n事件/正状态/通过=" + sensorEvents + "/" + positiveAccuracyEvents + "/" + acceptedEvents);
+            lastRawDisplay = now;
+        }
+        if (lastRawLog < 0 || now - lastRawLog >= 1000) {
+            log("RAW_HR raw=" + raw + " accuracy=" + e.accuracy + " values=" + Arrays.toString(e.values)
+                    + " eventNs=" + e.timestamp + " elapsedMs=" + now
+                    + " uptimeMs=" + SystemClock.uptimeMillis() + " sessionMs=" + sessionStarted
+                    + " ageMs=" + (now - eventMs) + " validation=" + reason + " decision=" + decision);
+            lastRawLog = now;
+        }
+        if (oldSession) {
+            // A queued old event does not invalidate an otherwise fresh current sample.
+            if (!sample.fresh(now)) setHrState(decision + "；见原始事件");
+            return;
+        }
+        if (e.values.length == 0 || !sample.accept(raw, e.accuracy, eventMs, now)) {
+            invalidateSample(reason + "，raw=" + raw + " accuracy=" + e.accuracy);
             return;
         }
         hadSample = true;
@@ -408,8 +447,9 @@ public final class MainActivity extends Activity implements SensorEventListener 
         pending.addAll(subscribers); drainNotifications();
     }
     @Override public void onAccuracyChanged(Sensor s, int accuracy) {
-        if (active && s.getType() == Sensor.TYPE_HEART_RATE && accuracy <= 0)
-            invalidateSample("无可靠读数或未佩戴，accuracy=" + accuracy);
+        if (!active || s.getType() != Sensor.TYPE_HEART_RATE) return;
+        log("ACCURACY_CHANGED accuracy=" + accuracy);
+        if (accuracy <= 0) invalidateSample("ACCURACY_CHANGED：不可靠或无接触，accuracy=" + accuracy);
     }
     private void invalidateSample(String reason) {
         sample.clear(); pending.clear(); hadSample = false;
@@ -440,6 +480,7 @@ public final class MainActivity extends Activity implements SensorEventListener 
         closeBle();
         if (receiverRegistered) { unregisterReceiver(bluetoothReceiver); receiverRegistered = false; }
         sample.clear(); hadSample = false; bpmText.setText("-- BPM");
+        rawState.setText("已停止；事件/通过=" + sensorEvents + "/" + acceptedEvents);
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         startButton.setText("开始检测与广播");
         startButton.setEnabled(true); stopButton.setEnabled(false);

@@ -4,6 +4,17 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class HeartRateSampleTest {
+    @Test public void diagnosticReasonsSeparatePositiveAccuracyFromOtherFailures() {
+        assertEquals("OK", HeartRateSample.rejectionReason(72, 1, 1000, 1000));
+        assertEquals("OK", HeartRateSample.rejectionReason(72, 3, 1000, 1000));
+        assertTrue(HeartRateSample.rejectionReason(0, 3, 1000, 1000).startsWith("INVALID_BPM"));
+        assertTrue(HeartRateSample.rejectionReason(72, 0, 1000, 1000).startsWith("UNRELIABLE"));
+        assertTrue(HeartRateSample.rejectionReason(72, -1, 1000, 1000).startsWith("NO_CONTACT"));
+        assertTrue(HeartRateSample.rejectionReason(Float.NaN, 3, 1000, 1000).startsWith("NONFINITE"));
+        assertTrue(HeartRateSample.rejectionReason(72, 3, -1, 1000).startsWith("INVALID_TIME"));
+        assertTrue(HeartRateSample.rejectionReason(72, 3, 1100, 1000).startsWith("FUTURE_TIME"));
+        assertTrue(HeartRateSample.rejectionReason(72, 3, 1000, 31000).startsWith("STALE_TIME"));
+    }
     @Test public void encodesUint8AndUint16LittleEndian() {
         HeartRateSample s = new HeartRateSample();
         assertTrue(s.accept(255, 3, 1000, 1000));

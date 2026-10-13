@@ -1,10 +1,31 @@
-# Watch4 HR Bridge v0.2：实机验收
+# Watch4 HR Bridge v0.3：实机验收
 
 目标：OWW221 / Android 11 API 30；接收端 Magene C606 Pro。当前版本只有前台验证。
 构建参数：AGP 8.7.3 / Gradle 8.9 / JDK 17 / compileSdk 35 / targetSdk 35 / minSdk 26。
 targetSdk 从 30 更新至 35，以通过完整 lint 的目标 API 检查；minSdk 26 保持对 Android 11 的安装支持。
 运行时只开放 Android 8–11 测试，Android 12+ 的蓝牙运行时权限流程尚未提供。
 云端编译、单元测试、lint、签名检查不证明 OPPO 传感器或 BLE 外设能力成功。
+
+## 无心率但 accuracy 为 1/3 时
+
+系统自带应用能测量，不能保证第三方 TYPE_HEART_RATE 获得相同读数。v0.3 显示原始事件及具体拒绝原因，维持原来的有效性校验。
+
+| 屏幕原因 | 下一步 |
+| --- | --- |
+| INVALID_BPM | 查看 raw 是否持续为 0 或非正常范围；收集 RAW_HR 的完整 values |
+| UNRELIABLE / NO_CONTACT | 查看状态恢复到 1/3 后是否出现正 BPM；不将这类事件广播为真实心率 |
+| FUTURE_TIME / STALE_TIME / OLD_SESSION | 收集 eventNs、elapsedMs、uptimeMs、sessionMs，核对厂商事件时钟；暂不自动修正时间 |
+| NO_EVENTS | 30 秒未收到传感器事件，检查监听注册、权限及厂商接口 |
+| OK 且通过计数增加 | 已接收到符合校验的实际读数；观察后续 accuracy=0 是否立即清空 |
+
+从系统心率应用退出后，进入本 App 点击开始，保持佩戴和前台 60 秒。
+拍下 raw、accuracy、事件年龄、事件/正状态/通过计数和心率状态。需要日志时运行：
+
+```bat
+adb logcat -v threadtime Watch4HR:I *:S > watch4-diag-v03.txt
+```
+
+出现“签名不一致”请参考下文卸载后安装步骤。v0.3 的 versionCode=3，页面标题 WATCH4 HR DIAG 0.3。
 
 ## 获取与安装（Windows 10，不需要 Android Studio）
 

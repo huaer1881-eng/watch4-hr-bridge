@@ -6,9 +6,19 @@ final class HeartRateSample {
     private int bpm;
     private long timestampMs = -1;
 
+    static String rejectionReason(float raw, int accuracy, long eventMs, long nowMs) {
+        if (accuracy == -1) return "NO_CONTACT：系统报告无接触";
+        if (accuracy <= 0) return "UNRELIABLE：系统报告不可靠";
+        if (!Float.isFinite(raw)) return "NONFINITE：BPM 非有限值";
+        if (raw < 1 || raw > 65535) return "INVALID_BPM：原始 BPM 超出范围";
+        if (eventMs < 0) return "INVALID_TIME：时间戳为负";
+        if (eventMs > nowMs) return "FUTURE_TIME：事件时间晚于系统时间";
+        if (nowMs - eventMs >= MAX_AGE_MS) return "STALE_TIME：事件已过期";
+        return "OK";
+    }
+
     boolean accept(float raw, int accuracy, long eventMs, long nowMs) {
-        if (!Float.isFinite(raw) || raw < 1 || raw > 65535 || accuracy <= 0
-                || eventMs < 0 || eventMs > nowMs || nowMs - eventMs >= MAX_AGE_MS) {
+        if (!"OK".equals(rejectionReason(raw, accuracy, eventMs, nowMs))) {
             clear();
             return false;
         }
