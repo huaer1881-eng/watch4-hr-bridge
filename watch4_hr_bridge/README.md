@@ -26,7 +26,7 @@
 
 用于定位“accuracy 在 0/1/3 变化但无 BPM”的实机反馈。屏幕新增 raw、accuracy、事件年龄和事件/正状态/通过计数；日志 RAW_HR 包含完整标准事件值、事件时间、elapsedRealtime、uptime 与每次校验原因。
 实机截图显示 raw=77、age=-1800ms、事件/正状态/通过=42/10/0。旧版严格拒绝未来时间；它很可能也阻断了正 accuracy 的读数，尚需新版实测确认。
-仅对 Build.DEVICE=OWW221（忽略大小写）容忍最多2500ms未来偏差。可靠、有限、范围内的真实读数在此窗口内采用接收时刻计算新鲜度；日志保留原始时间和 boundedArrivalTime 标记。超过窗口、过期、零值、accuracy<=0仍拒绝；其他设备保留严格时间策略。
+仅对 Build.DEVICE 或 Build.MODEL 为 OWW221（忽略大小写）容忍最多2500ms未来偏差。可靠、有限、范围内的真实读数在此窗口内采用接收时刻计算新鲜度；日志保留原始时间和 boundedArrivalTime 标记。超过窗口、过期、零值、accuracy<=0仍拒绝；其他设备保留严格时间策略。
 此兼容规则依据本次观察，不证明厂商时钟异常的具体来源。30秒有效期限和准确性过滤仍保留。
 诊断原因包括 INVALID_BPM、UNRELIABLE、NO_CONTACT、FUTURE_TIME、STALE_TIME、OLD_SESSION。
 请先在系统应用完成一次测量，退出后进入本 App 保持前台 60 秒，发送原始事件区域与状态截图。

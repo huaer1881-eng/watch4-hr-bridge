@@ -24,7 +24,8 @@ public final class MainActivity extends Activity implements SensorEventListener 
     private static final UUID CCCD_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
     private static final int REQUEST_BODY_SENSORS = 100;
     private final Handler main = new Handler(Looper.getMainLooper());
-    private final long futureSkewMs = "OWW221".equalsIgnoreCase(Build.DEVICE)
+    private final long futureSkewMs = ("OWW221".equalsIgnoreCase(Build.DEVICE)
+            || "OWW221".equalsIgnoreCase(Build.MODEL))
             ? HeartRateSample.MAX_FUTURE_SKEW_MS : 0;
     private final HeartRateSample sample = new HeartRateSample(futureSkewMs);
     private final Map<String, BluetoothDevice> connected = new LinkedHashMap<>();
@@ -67,7 +68,7 @@ public final class MainActivity extends Activity implements SensorEventListener 
         bluetoothAdapter = bluetoothManager == null ? null : bluetoothManager.getAdapter();
         log("Android " + Build.VERSION.RELEASE + " / API " + Build.VERSION.SDK_INT);
         log("CPU: " + TextUtils.join(", ", Build.SUPPORTED_ABIS));
-        log("DEVICE=" + Build.DEVICE + " futureSkewToleranceMs=" + futureSkewMs);
+        log("DEVICE=" + Build.DEVICE + " MODEL=" + Build.MODEL + " futureSkewToleranceMs=" + futureSkewMs);
         setHrState(hrSensor == null ? "未提供 HEART_RATE" : "已发现：" + hrSensor.getName());
         if (hrSensor != null) {
             log("SENSOR name=" + hrSensor.getName() + " vendor=" + hrSensor.getVendor()
