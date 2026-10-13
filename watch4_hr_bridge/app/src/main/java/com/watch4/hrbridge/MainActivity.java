@@ -41,6 +41,7 @@ public final class MainActivity extends Activity implements SensorEventListener 
     private AdvertiseCallback advertiseCallback;
     private boolean active, foreground, sensorListening, receiverRegistered, requestingPermission;
     private boolean hadSample, notificationBlocked;
+    private boolean advertising;
     private int generation;
     private String inFlight;
     private long notificationStarted, sessionStarted;
@@ -160,7 +161,7 @@ public final class MainActivity extends Activity implements SensorEventListener 
                 log("registerListener=" + sensorListening);
             } else setHrState("FAIL：无标准心率传感器");
             startBluetooth(token);
-        } catch (RuntimeException e) { failBle("初始化异常 " + e, token); }
+        } catch (SecurityException e) { log("权限异常：" + e); } catch (RuntimeException e) { failBle("初始化异常 " + e, token); }
         main.postDelayed(tick, 1000);
     }
 
@@ -187,6 +188,7 @@ public final class MainActivity extends Activity implements SensorEventListener 
     };
 
     private void startBluetooth(int token) {
+        try {
         if (bluetoothAdapter == null) { failBle("无 BluetoothAdapter", token); return; }
         if (!bluetoothAdapter.isEnabled()) { failBle("先开启手表蓝牙", token); return; }
         log("isMultipleAdvertisementSupported=" + bluetoothAdapter.isMultipleAdvertisementSupported());
@@ -210,6 +212,8 @@ public final class MainActivity extends Activity implements SensorEventListener 
             if (current(token) && advertiseCallback == null) failBle("onServiceAdded 超时", token);
         }, 10_000);
     }
+        catch (SecurityException e) { failBle("蓝牙权限异常 " + e, token); }
+    }
     private boolean current(int token) { return active && generation == token; }
     private void failBle(String reason, int token) {
         if (!current(token)) return;
@@ -225,10 +229,11 @@ public final class MainActivity extends Activity implements SensorEventListener 
         final AdvertiseCallback callback = new AdvertiseCallback() {
             @Override public void onStartSuccess(AdvertiseSettings settings) { main.post(() -> {
                 if (!current(token) || advertiseCallback != this) {
-                    try { owner.stopAdvertising(this); } catch (RuntimeException e) { log("取消旧广播：" + e); }
+                    try { owner.stopAdvertising(this); } catch (SecurityException e) { log("权限异常：" + e); } catch (RuntimeException e) { log("取消旧广播：" + e); }
                     return;
                 }
                 setBleState("OK：广播回调成功 0x180D");
+                advertising = true;
                 log("SUCCESS: onStartSuccess；尚需码表实测");
             }); }
             @Override public void onStartFailure(int errorCode) { main.post(() -> {
@@ -253,7 +258,11 @@ public final class MainActivity extends Activity implements SensorEventListener 
         log("广播名称模式=" + includeName);
         setBleState("启动广播中…");
         try { owner.startAdvertising(settings, data, scan, callback); }
-        catch (RuntimeException e) { failBle("startAdvertising 异常 " + e, token); }
+        catch (SecurityException e) { log("权限异常：" + e); } catch (RuntimeException e) { failBle("startAdvertising 异常 " + e, token); }
+        main.postDelayed(() -> {
+            if (current(token) && advertiseCallback == callback && !advertising)
+                failBle("广播启动回调超时", token);
+        }, 10_000);
     }
 
     private BluetoothGattServerCallback callbacks(final int token) {
@@ -262,19 +271,20 @@ public final class MainActivity extends Activity implements SensorEventListener 
                 main.post(() -> {
                     if (!current(token) || gattServer == null) return;
                     try { action.run(); }
-                    catch (RuntimeException e) { failBle("GATT 回调异常 " + e, token); }
+                    catch (SecurityException e) { log("权限异常：" + e); } catch (RuntimeException e) { failBle("GATT 回调异常 " + e, token); }
                 });
             }
             @Override public void onServiceAdded(int status, BluetoothGattService service) {
-                dispatch(() -> {
+                dispatch(() -> { try {
                     log("onServiceAdded status=" + status);
                     if (status == BluetoothGatt.GATT_SUCCESS && HR_SERVICE_UUID.equals(service.getUuid()))
                         startAdvertising(token, true);
                     else failBle("addService status=" + status, token);
+                } catch (SecurityException e) { failBle("权限被撤销 " + e, token); }
                 });
             }
             @Override public void onConnectionStateChange(BluetoothDevice d, int status, int state) {
-                dispatch(() -> {
+                dispatch(() -> { try {
                     String id = d.getAddress();
                     log("连接 status=" + status + " state=" + state);
                     if (status == BluetoothGatt.GATT_SUCCESS && state == BluetoothProfile.STATE_CONNECTED) {
@@ -286,23 +296,25 @@ public final class MainActivity extends Activity implements SensorEventListener 
                         // Clearing it now could misattribute a delayed callback after reconnect.
                     }
                     setConnectedState();
+                } catch (SecurityException e) { failBle("权限被撤销 " + e, token); }
                 });
             }
             @Override public void onDescriptorReadRequest(BluetoothDevice d, int id, int offset,
                                                           BluetoothGattDescriptor descriptor) {
-                dispatch(() -> {
+                dispatch(() -> { try {
                     if (!isCccd(descriptor)) { respond(d, id, BluetoothGatt.GATT_REQUEST_NOT_SUPPORTED, offset, null); return; }
                     byte[] v = subscribers.contains(d.getAddress())
                             ? BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE : BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE;
                     if (offset < 0 || offset > v.length) respond(d, id, BluetoothGatt.GATT_INVALID_OFFSET, offset, null);
                     else respond(d, id, BluetoothGatt.GATT_SUCCESS, offset, Arrays.copyOfRange(v, offset, v.length));
+                } catch (SecurityException e) { failBle("权限被撤销 " + e, token); }
                 });
             }
             @Override public void onDescriptorWriteRequest(BluetoothDevice d, int id,
                     BluetoothGattDescriptor descriptor, boolean prepared, boolean responseNeeded, int offset, byte[] value) {
                 // The Bluetooth callback's byte array must not be retained without copying.
                 final byte[] copy = value == null ? null : value.clone();
-                dispatch(() -> {
+                dispatch(() -> { try {
                     int result = BluetoothGatt.GATT_REQUEST_NOT_SUPPORTED;
                     boolean enabled = false;
                     if (isCccd(descriptor) && !prepared) {
@@ -321,6 +333,7 @@ public final class MainActivity extends Activity implements SensorEventListener 
                     if (enabled && sample.fresh(SystemClock.elapsedRealtime())) {
                         pending.add(d.getAddress()); drainNotifications();
                     }
+                } catch (SecurityException e) { failBle("权限被撤销 " + e, token); }
                 });
             }
             @Override public void onExecuteWrite(BluetoothDevice d, int id, boolean execute) {
@@ -336,11 +349,12 @@ public final class MainActivity extends Activity implements SensorEventListener 
                 if (responseNeeded) dispatch(() -> respond(d, id, BluetoothGatt.GATT_WRITE_NOT_PERMITTED, offset, null));
             }
             @Override public void onNotificationSent(BluetoothDevice d, int status) {
-                dispatch(() -> {
+                dispatch(() -> { try {
                     if (!d.getAddress().equals(inFlight)) return;
                     inFlight = null;
                     if (status != BluetoothGatt.GATT_SUCCESS) log("通知完成失败 status=" + status);
                     if (!notificationBlocked) drainNotifications();
+                } catch (SecurityException e) { failBle("权限被撤销 " + e, token); }
                 });
             }
         };
@@ -350,7 +364,9 @@ public final class MainActivity extends Activity implements SensorEventListener 
                 && HR_MEASUREMENT_UUID.equals(d.getCharacteristic().getUuid());
     }
     private void respond(BluetoothDevice d, int id, int status, int offset, byte[] value) {
-        if (!gattServer.sendResponse(d, id, status, offset, value)) log("WARN: sendResponse=false");
+        try {
+            if (!gattServer.sendResponse(d, id, status, offset, value)) log("WARN: sendResponse=false");
+        } catch (SecurityException e) { log("sendResponse 权限异常：" + e); }
     }
     private void drainNotifications() {
         if (gattServer == null || hrCharacteristic == null || inFlight != null || notificationBlocked) return;
@@ -365,12 +381,13 @@ public final class MainActivity extends Activity implements SensorEventListener 
             try {
                 if (gattServer.notifyCharacteristicChanged(d, hrCharacteristic, false)) return;
                 inFlight = null; log("WARN: notifyCharacteristicChanged=false");
-            } catch (RuntimeException e) { inFlight = null; log("通知异常：" + e); }
+            } catch (SecurityException e) { log("权限异常：" + e); } catch (RuntimeException e) { inFlight = null; log("通知异常：" + e); }
         }
     }
     @Override public void onSensorChanged(SensorEvent e) {
         if (!active || !sensorListening || e.sensor.getType() != Sensor.TYPE_HEART_RATE || e.values.length == 0) return;
         long now = SystemClock.elapsedRealtime();
+        if (e.timestamp / 1_000_000 < sessionStarted) return;
         if (!sample.accept(e.values[0], e.accuracy, e.timestamp / 1_000_000, now)) {
             invalidateSample("无效或无接触，accuracy=" + e.accuracy);
             return;
@@ -396,11 +413,11 @@ public final class MainActivity extends Activity implements SensorEventListener 
     }
     private void closeBle() {
         if (advertiser != null && advertiseCallback != null) {
-            try { advertiser.stopAdvertising(advertiseCallback); } catch (RuntimeException e) { log("stopAdvertising：" + e); }
+            try { advertiser.stopAdvertising(advertiseCallback); } catch (SecurityException e) { log("权限异常：" + e); } catch (RuntimeException e) { log("stopAdvertising：" + e); }
         }
-        advertiseCallback = null; advertiser = null;
+        advertiseCallback = null; advertiser = null; advertising = false;
         if (gattServer != null) {
-            try { gattServer.close(); } catch (RuntimeException e) { log("close GATT：" + e); }
+            try { gattServer.close(); } catch (SecurityException e) { log("权限异常：" + e); } catch (RuntimeException e) { log("close GATT：" + e); }
         }
         gattServer = null; hrCharacteristic = null;
         connected.clear(); subscribers.clear(); pending.clear(); inFlight = null;
@@ -411,7 +428,7 @@ public final class MainActivity extends Activity implements SensorEventListener 
         active = false; generation++;
         main.removeCallbacks(tick);
         if (sensorManager != null && sensorListening) {
-            try { sensorManager.unregisterListener(this); } catch (RuntimeException e) { log("unregister sensor：" + e); }
+            try { sensorManager.unregisterListener(this); } catch (SecurityException e) { log("权限异常：" + e); } catch (RuntimeException e) { log("unregister sensor：" + e); }
         }
         sensorListening = false;
         closeBle();
