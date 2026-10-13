@@ -10,6 +10,7 @@
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
     <application
         android:allowBackup="false"
+        android:icon="@drawable/ic_heart"
         android:label="Watch4 HR Test"
         android:theme="@android:style/Theme.Material.NoActionBar"
         android:usesCleartextTraffic="false">
