@@ -10,8 +10,9 @@ android {
         // Target current APIs; minSdk still allows installation on Android 11.
         // This foreground diagnostic explicitly gates BLE testing to API <=30.
         targetSdk 35
-        versionCode 4
-        versionName '0.4-clock-fix'
+        versionCode 5
+        versionName '0.5-ride'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
@@ -27,5 +28,8 @@ android {
 
 dependencies {
     testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test:core:1.6.1'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
 }
 
