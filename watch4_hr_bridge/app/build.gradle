@@ -10,8 +10,8 @@ android {
         // Target current APIs; minSdk still allows installation on Android 11.
         // This foreground diagnostic explicitly gates BLE testing to API <=30.
         targetSdk 35
-        versionCode 3
-        versionName '0.3-diagnostic'
+        versionCode 4
+        versionName '0.4-clock-fix'
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8

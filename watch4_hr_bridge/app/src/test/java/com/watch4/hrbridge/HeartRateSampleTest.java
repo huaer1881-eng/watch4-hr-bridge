@@ -4,6 +4,25 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class HeartRateSampleTest {
+    @Test public void oppoObservedFutureSkewAcceptsOnlyReliableRealReadings() {
+        HeartRateSample s = new HeartRateSample(HeartRateSample.MAX_FUTURE_SKEW_MS);
+        assertTrue(s.accept(77, 1, 11_800, 10_000));
+        assertArrayEquals(new byte[]{0, 77}, s.payload(10_000));
+        assertTrue(s.accept(77, 3, 11_800, 10_000));
+        assertFalse(s.accept(77, 0, 11_800, 10_000));
+        assertNull(s.payload(10_000));
+        assertFalse(s.accept(77, -1, 11_800, 10_000));
+        assertFalse(s.accept(0, 3, 11_800, 10_000));
+    }
+    @Test public void toleranceIsBoundedAndDoesNotExtendThirtySecondFreshness() {
+        HeartRateSample s = new HeartRateSample(2500);
+        assertTrue(s.accept(77, 3, 12_500, 10_000));
+        assertNotNull(s.payload(39_999));
+        assertNull(s.payload(40_000));
+        assertFalse(s.accept(77, 3, 12_501, 10_000));
+        assertFalse(s.accept(77, 3, 10_000, 40_000));
+        assertFalse(new HeartRateSample().accept(77, 3, 11_800, 10_000));
+    }
     @Test public void diagnosticReasonsSeparatePositiveAccuracyFromOtherFailures() {
         assertEquals("OK", HeartRateSample.rejectionReason(72, 1, 1000, 1000));
         assertEquals("OK", HeartRateSample.rejectionReason(72, 3, 1000, 1000));

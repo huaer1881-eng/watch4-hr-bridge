@@ -1,4 +1,4 @@
-# Watch4 HR Bridge v0.3：实机验收
+# Watch4 HR Bridge v0.4：实机验收
 
 目标：OWW221 / Android 11 API 30；接收端 Magene C606 Pro。当前版本只有前台验证。
 构建参数：AGP 8.7.3 / Gradle 8.9 / JDK 17 / compileSdk 35 / targetSdk 35 / minSdk 26。
@@ -8,13 +8,16 @@ targetSdk 从 30 更新至 35，以通过完整 lint 的目标 API 检查；minS
 
 ## 无心率但 accuracy 为 1/3 时
 
-系统自带应用能测量，不能保证第三方 TYPE_HEART_RATE 获得相同读数。v0.3 显示原始事件及具体拒绝原因，维持原来的有效性校验。
+系统自带应用能测量，不能保证第三方 TYPE_HEART_RATE 获得相同读数。v0.4 显示原始事件及具体拒绝原因。
+实机截图已显示正 raw=77，事件时间比App时间晚1800ms。v0.4仅对OWW221启用2500ms上限的未来时钟兼容，仍拒绝accuracy<=0。
+先确认日志 DEVICE=OWW221、屏幕窗口=2500ms，再检查accuracy=1/3时通过次数是否增加并显示实际BPM。
+窗口内未来读数以接收时刻计算新鲜度，不延长30秒期限；原始事件时间保留在RAW_HR日志。超过窗口仍拒绝。
 
 | 屏幕原因 | 下一步 |
 | --- | --- |
 | INVALID_BPM | 查看 raw 是否持续为 0 或非正常范围；收集 RAW_HR 的完整 values |
 | UNRELIABLE / NO_CONTACT | 查看状态恢复到 1/3 后是否出现正 BPM；不将这类事件广播为真实心率 |
-| FUTURE_TIME / STALE_TIME / OLD_SESSION | 收集 eventNs、elapsedMs、uptimeMs、sessionMs，核对厂商事件时钟；暂不自动修正时间 |
+| FUTURE_TIME / STALE_TIME / OLD_SESSION | 收集 eventNs、elapsedMs、uptimeMs、sessionMs；超过未来兼容窗口或过期仍拒绝，不作无限制时间修正 |
 | NO_EVENTS | 30 秒未收到传感器事件，检查监听注册、权限及厂商接口 |
 | OK 且通过计数增加 | 已接收到符合校验的实际读数；观察后续 accuracy=0 是否立即清空 |
 
@@ -22,10 +25,11 @@ targetSdk 从 30 更新至 35，以通过完整 lint 的目标 API 检查；minS
 拍下 raw、accuracy、事件年龄、事件/正状态/通过计数和心率状态。需要日志时运行：
 
 ```bat
-adb logcat -v threadtime Watch4HR:I *:S > watch4-diag-v03.txt
+adb logcat -v threadtime Watch4HR:I *:S > watch4-clock-v04.txt
 ```
 
-出现“签名不一致”请参考下文卸载后安装步骤。v0.3 的 versionCode=3，页面标题 WATCH4 HR DIAG 0.3。
+出现“签名不一致”请参考下文卸载后安装步骤。v0.4 的 versionCode=4，页面标题 WATCH4 HR TEST 0.4。
+截图订阅数=0表示尚未开启2A37通知；连接成功后在nRF Connect选择Heart Rate Measurement的Enable notifications，再确认订阅=1。
 
 ## 获取与安装（Windows 10，不需要 Android Studio）
 

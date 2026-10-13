@@ -24,7 +24,9 @@ public final class MainActivity extends Activity implements SensorEventListener 
     private static final UUID CCCD_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
     private static final int REQUEST_BODY_SENSORS = 100;
     private final Handler main = new Handler(Looper.getMainLooper());
-    private final HeartRateSample sample = new HeartRateSample();
+    private final long futureSkewMs = "OWW221".equalsIgnoreCase(Build.DEVICE)
+            ? HeartRateSample.MAX_FUTURE_SKEW_MS : 0;
+    private final HeartRateSample sample = new HeartRateSample(futureSkewMs);
     private final Map<String, BluetoothDevice> connected = new LinkedHashMap<>();
     private final Set<String> subscribers = new HashSet<>();
     private final Set<String> pending = new LinkedHashSet<>();
@@ -65,6 +67,7 @@ public final class MainActivity extends Activity implements SensorEventListener 
         bluetoothAdapter = bluetoothManager == null ? null : bluetoothManager.getAdapter();
         log("Android " + Build.VERSION.RELEASE + " / API " + Build.VERSION.SDK_INT);
         log("CPU: " + TextUtils.join(", ", Build.SUPPORTED_ABIS));
+        log("DEVICE=" + Build.DEVICE + " futureSkewToleranceMs=" + futureSkewMs);
         setHrState(hrSensor == null ? "未提供 HEART_RATE" : "已发现：" + hrSensor.getName());
         if (hrSensor != null) {
             log("SENSOR name=" + hrSensor.getName() + " vendor=" + hrSensor.getVendor()
@@ -91,7 +94,7 @@ public final class MainActivity extends Activity implements SensorEventListener 
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(16), dp(7), dp(16), dp(18));
         scroll.addView(root);
-        TextView title = text("WATCH4 HR DIAG 0.3", 16, Color.WHITE, true);
+        TextView title = text("WATCH4 HR TEST 0.4", 16, Color.WHITE, true);
         title.setGravity(Gravity.CENTER); root.addView(title);
         bpmText = text("-- BPM", 33, Color.rgb(116, 224, 174), true);
         bpmText.setGravity(Gravity.CENTER); root.addView(bpmText);
@@ -409,7 +412,7 @@ public final class MainActivity extends Activity implements SensorEventListener 
         if (e.accuracy > 0) positiveAccuracyEvents++;
         float raw = e.values.length == 0 ? Float.NaN : e.values[0];
         String reason = e.values.length == 0 ? "EMPTY_VALUES：事件无 BPM"
-                : HeartRateSample.rejectionReason(raw, e.accuracy, eventMs, now);
+                : sample.reason(raw, e.accuracy, eventMs, now);
         boolean oldSession = eventMs < sessionStarted;
         // Preserve the original policy: never replay events from a previous session.
         // Report both the validation result and this additional session gate.
@@ -417,7 +420,7 @@ public final class MainActivity extends Activity implements SensorEventListener 
         if (!oldSession && "OK".equals(reason)) acceptedEvents++;
         if (lastRawDisplay < 0 || now - lastRawDisplay >= 1000) {
             rawState.setText("raw=" + raw + "  accuracy=" + e.accuracy
-                    + "\n事件年龄=" + (now - eventMs) + "ms"
+                    + "\n事件年龄=" + (now - eventMs) + "ms，窗口=" + futureSkewMs + "ms"
                     + "\n事件/正状态/通过=" + sensorEvents + "/" + positiveAccuracyEvents + "/" + acceptedEvents);
             lastRawDisplay = now;
         }
@@ -425,7 +428,9 @@ public final class MainActivity extends Activity implements SensorEventListener 
             log("RAW_HR raw=" + raw + " accuracy=" + e.accuracy + " values=" + Arrays.toString(e.values)
                     + " eventNs=" + e.timestamp + " elapsedMs=" + now
                     + " uptimeMs=" + SystemClock.uptimeMillis() + " sessionMs=" + sessionStarted
-                    + " ageMs=" + (now - eventMs) + " validation=" + reason + " decision=" + decision);
+                    + " ageMs=" + (now - eventMs) + " futureToleranceMs=" + futureSkewMs
+                    + " boundedArrivalTime=" + (!oldSession && "OK".equals(reason) && eventMs > now)
+                    + " validation=" + reason + " decision=" + decision);
             lastRawLog = now;
         }
         if (oldSession) {
@@ -439,7 +444,7 @@ public final class MainActivity extends Activity implements SensorEventListener 
         }
         hadSample = true;
         bpmText.setText(sample.bpm() + " BPM");
-        setHrState("真实 BPM，accuracy=" + e.accuracy);
+        setHrState("真实 BPM，accuracy=" + e.accuracy + (eventMs > now ? "（时钟兼容）" : ""));
         if (sample.bpm() != lastLoggedBpm || now - lastSampleLog >= 10_000) {
             log("HR bpm=" + sample.bpm() + " accuracy=" + e.accuracy);
             lastLoggedBpm = sample.bpm(); lastSampleLog = now;
