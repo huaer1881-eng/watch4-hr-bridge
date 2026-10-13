@@ -1,6 +1,9 @@
 # Watch4 HR Bridge v0.2：实机验收
 
 目标：OWW221 / Android 11 API 30；接收端 Magene C606 Pro。当前版本只有前台验证。
+构建参数：AGP 8.7.3 / Gradle 8.9 / JDK 17 / compileSdk 35 / targetSdk 35 / minSdk 26。
+targetSdk 从 30 更新至 35，以通过完整 lint 的目标 API 检查；minSdk 26 保持对 Android 11 的安装支持。
+运行时只开放 Android 8–11 测试，Android 12+ 的蓝牙运行时权限流程尚未提供。
 云端编译、单元测试、lint、签名检查不证明 OPPO 传感器或 BLE 外设能力成功。
 
 ## 获取与安装（Windows 10，不需要 Android Studio）

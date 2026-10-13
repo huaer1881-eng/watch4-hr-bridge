@@ -240,7 +240,8 @@ public final class MainActivity extends Activity implements SensorEventListener 
                 if (!current(token) || advertiseCallback != this) return;
                 log("FAIL: advertise errorCode=" + errorCode);
                 if (includeName && errorCode == ADVERTISE_FAILED_DATA_TOO_LARGE) {
-                    owner.stopAdvertising(this);
+                    try { owner.stopAdvertising(this); }
+                    catch (SecurityException e) { failBle("取消广播权限异常 " + e, token); return; }
                     advertiseCallback = null;
                     startAdvertising(token, false);
                 } else failBle("广播错误码 " + errorCode, token);

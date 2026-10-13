@@ -7,7 +7,9 @@ android {
     defaultConfig {
         applicationId 'com.watch4.hrbridge'
         minSdk 26
-        targetSdk 30
+        // Target current APIs; minSdk still allows installation on Android 11.
+        // This foreground diagnostic explicitly gates BLE testing to API <=30.
+        targetSdk 35
         versionCode 2
         versionName '0.2-test'
     }
