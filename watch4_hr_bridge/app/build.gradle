@@ -8,16 +8,22 @@ android {
         applicationId 'com.watch4.hrbridge'
         minSdk 26
         targetSdk 30
-        versionCode 1
-        versionName '0.1-test'
+        versionCode 2
+        versionName '0.2-test'
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
+    buildToolsVersion '35.0.0'
     buildTypes {
         release {
             minifyEnabled false
         }
     }
 }
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+}
+

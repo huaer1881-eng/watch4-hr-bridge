@@ -33,7 +33,7 @@ jobs:
           gradle-version: '8.9'
       - name: Build and check debug APK
         working-directory: watch4_hr_bridge
-        run: gradle --no-daemon --console=plain --stacktrace assembleDebug lintDebug
+        run: gradle --no-daemon --console=plain --stacktrace assembleDebug testDebugUnitTest lintDebug
       - name: Verify APK signature and package
         run: |
           set -euo pipefail
@@ -55,5 +55,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: android-lint
-          path: watch4_hr_bridge/app/build/reports/lint-results-debug.*
+          path: |
+            watch4_hr_bridge/app/build/reports/lint-results-debug.*
+            watch4_hr_bridge/app/build/test-results/testDebugUnitTest/*.xml
           if-no-files-found: warn
+
