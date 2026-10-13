@@ -242,6 +242,7 @@ public final class MainActivity extends Activity implements SensorEventListener 
                 if (includeName && errorCode == ADVERTISE_FAILED_DATA_TOO_LARGE) {
                     try { owner.stopAdvertising(this); }
                     catch (SecurityException e) { failBle("取消广播权限异常 " + e, token); return; }
+                    catch (RuntimeException e) { failBle("取消广播异常 " + e, token); return; }
                     advertiseCallback = null;
                     startAdvertising(token, false);
                 } else failBle("广播错误码 " + errorCode, token);
@@ -382,7 +383,11 @@ public final class MainActivity extends Activity implements SensorEventListener 
             try {
                 if (gattServer.notifyCharacteristicChanged(d, hrCharacteristic, false)) return;
                 inFlight = null; log("WARN: notifyCharacteristicChanged=false");
-            } catch (SecurityException e) { log("权限异常：" + e); } catch (RuntimeException e) { inFlight = null; log("通知异常：" + e); }
+            } catch (SecurityException e) {
+                inFlight = null;
+                failBle("通知权限异常 " + e, generation);
+                return;
+            } catch (RuntimeException e) { inFlight = null; log("通知异常：" + e); }
         }
     }
     @Override public void onSensorChanged(SensorEvent e) {
@@ -445,4 +450,5 @@ public final class MainActivity extends Activity implements SensorEventListener 
     @Override protected void onStop() { foreground = false; stopAll("离开前台，资源已释放"); super.onStop(); }
     @Override protected void onDestroy() { stopAll("应用关闭"); main.removeCallbacksAndMessages(null); super.onDestroy(); }
 }
+
 
