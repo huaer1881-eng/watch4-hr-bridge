@@ -16,7 +16,7 @@ final class RideEngine implements SensorEventListener {
     static final class State {
         final boolean running, sensorListening;
         final int bpm, connections, subscriptions, events, accepted;
-        final long startedMs, notificationCount;
+        final long startedMs, notificationCount, updatedMs;
         final String hr, ble, raw, logs;
         State(boolean running, boolean listening, int bpm, int connections, int subscriptions,
                 int events, int accepted, long startedMs, long notifications,
@@ -25,6 +25,7 @@ final class RideEngine implements SensorEventListener {
             this.connections=connections; this.subscriptions=subscriptions;
             this.events=events; this.accepted=accepted; this.startedMs=startedMs;
             this.notificationCount=notifications; this.hr=hr; this.ble=ble; this.raw=raw; this.logs=logs;
+            this.updatedMs=SystemClock.elapsedRealtime();
         }
         static State idle() { return new State(false,false,0,0,0,0,0,0,0,"未开始","未开始","",""); }
     }

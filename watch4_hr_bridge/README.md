@@ -32,6 +32,6 @@ API12+未开放，本版运行范围Android8–11。
 ## 云端验证
 
 AGP8.7.3 / Gradle8.9 / JDK17 / compileSdk35 / targetSdk35 / minSdk26。
-CI执行APK编译、9个纯Java测试、lint、签名验证，并在Android11模拟器检查2个服务生命周期场景。
+CI执行APK编译、10个纯Java测试、lint、签名验证，并在Android11模拟器检查2个服务生命周期场景。
 AndroidX测试依赖只进入测试APK。模拟器验证不能替代OPPO的锁屏心率、码表兼容和实际功耗测量。
 

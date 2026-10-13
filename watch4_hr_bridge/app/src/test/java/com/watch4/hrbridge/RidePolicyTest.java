@@ -5,11 +5,16 @@ import static org.junit.Assert.*;
 
 public class RidePolicyTest {
     @Test public void cpuLockIsLimitedToActiveReliableScreenOffSampling() {
-        assertTrue(PowerPolicy.needsCpuLock(true,true,false,true));
-        assertFalse(PowerPolicy.needsCpuLock(false,true,false,true));
-        assertFalse(PowerPolicy.needsCpuLock(true,false,false,true));
-        assertFalse(PowerPolicy.needsCpuLock(true,true,true,true));
-        assertFalse(PowerPolicy.needsCpuLock(true,true,false,false));
+        assertTrue(PowerPolicy.needsCpuLock(true,true,false,true,0));
+        assertFalse(PowerPolicy.needsCpuLock(false,true,false,true,0));
+        assertFalse(PowerPolicy.needsCpuLock(true,false,false,true,0));
+        assertFalse(PowerPolicy.needsCpuLock(true,true,true,true,0));
+        assertFalse(PowerPolicy.needsCpuLock(true,true,false,false,0));
+    }
+    @Test public void staleWorkerCannotJustifyCpuLockRenewal() {
+        assertTrue(PowerPolicy.needsCpuLock(true,true,false,true,10000));
+        assertFalse(PowerPolicy.needsCpuLock(true,true,false,true,10001));
+        assertFalse(PowerPolicy.needsCpuLock(true,true,false,true,-1));
     }
     @Test public void repeatedBleFailuresBackOffAndRemainCapped() {
         RetryBackoff b=new RetryBackoff();

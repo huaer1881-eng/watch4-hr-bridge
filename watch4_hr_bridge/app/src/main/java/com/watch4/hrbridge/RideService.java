@@ -124,11 +124,12 @@ public final class RideService extends Service {
         updateCpuLock();updateNotification(false);ui.postDelayed(this,60000);
     }};
     private void updateCpuLock(){
-        boolean needed=PowerPolicy.needsCpuLock(riding,reliableMode(),power.isInteractive(),state.sensorListening);
+        boolean needed=PowerPolicy.needsCpuLock(riding,reliableMode(),power.isInteractive(),state.sensorListening,
+                SystemClock.elapsedRealtime()-state.updatedMs);
         if(needed){
             long now=SystemClock.elapsedRealtime();
             if(!cpuLock.isHeld() || now-lastLockRenew>=60000){
-                // A renewable ten-minute lease limits a leaked lock if the service looper stalls.
+                // Renewable lease; a stale worker snapshot cannot justify renewing it.
                 cpuLock.acquire(600000L);lastLockRenew=now;
             }
         }else if(cpuLock.isHeld())cpuLock.release();
